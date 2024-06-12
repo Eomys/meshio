@@ -1,6 +1,7 @@
 """
 I/O for Abaqus inp files.
 """
+
 import pathlib
 from itertools import count
 
@@ -93,6 +94,10 @@ abaqus_to_meshio_type = {
     #
     # 4-node bilinear displacement and pore pressure
     "CAX4P": "quad",
+    # rigids
+    "CONN3D2": "line",
+    # Mass
+    "MASS": "vertex",
 }
 meshio_to_abaqus_type = {v: k for k, v in abaqus_to_meshio_type.items()}
 
@@ -106,7 +111,7 @@ def read(filename):
 
 def read_buffer(f):
     # Initialize the optional data fields
-    points = []
+    points = None
     cells = []
     cell_ids = []
     point_sets = {}
@@ -130,7 +135,18 @@ def read_buffer(f):
 
         keyword = line.partition(",")[0].strip().replace("*", "").upper()
         if keyword == "NODE":
-            points, point_ids, line = _read_nodes(f)
+            tmp_points, tmp_point_ids, line = _read_nodes(f)
+            # Concatenate node coordinate
+            points = (
+                tmp_points
+                if points is None
+                else np.concatenate((points, tmp_points), axis=0)
+            )
+            # Concatenate node id
+            point_ids = (
+                tmp_point_ids if point_ids is None else {**point_ids, **tmp_point_ids}
+            )
+
         elif keyword == "ELEMENT":
             if point_ids is None:
                 raise ReadError("Expected NODE before ELEMENT")
@@ -145,11 +161,15 @@ def read_buffer(f):
                 cell_sets_element_order += list(sets.keys())
         elif keyword == "NSET":
             params_map = get_param_map(line, required_keys=["NSET"])
-            set_ids, _, line = _read_set(f, params_map)
+            set_ids, set_name_list, line = _read_set(f, params_map)
             name = params_map["NSET"]
-            point_sets[name] = np.array(
-                [point_ids[point_id] for point_id in set_ids], dtype="int32"
-            )
+            if set_ids.size == 0 and len(set_name_list) != 0:
+                # temp = [list(point_sets[name_set]) for name_set in set_name_list]
+                # set_ids = np.array(temp, dtype="int32").sort()
+                # point_sets[name] = set_ids
+                pass
+            else:
+                point_sets[name] = set_ids
         elif keyword == "ELSET":
             params_map = get_param_map(line, required_keys=["ELSET"])
             set_ids, set_names, line = _read_set(f, params_map)
@@ -214,7 +234,7 @@ def read_buffer(f):
                     cell_sets_element[name] if i == ic else np.array([], dtype="int32")
                 )
 
-    return Mesh(
+    mesh = Mesh(
         points,
         cells,
         point_data=point_data,
@@ -223,6 +243,8 @@ def read_buffer(f):
         point_sets=point_sets,
         cell_sets=cell_sets,
     )
+    mesh.points_id = np.array(list(point_ids.keys()))
+    return mesh
 
 
 def _read_nodes(f):
@@ -271,6 +293,7 @@ def _read_cells(f, params_map, point_ids):
     idx = np.array(idx).reshape((-1, num_data))
     cell_ids = dict(zip(idx[:, 0], count(0)))
     cells = np.array([[point_ids[node] for node in elem] for elem in idx[:, 1:]])
+    # cells = np.array(idx[:, 1:])
 
     cell_sets = (
         {params_map["ELSET"]: np.arange(len(cells), dtype="int32")}
@@ -385,7 +408,7 @@ def _read_set(f, params_map):
         if line[0].isnumeric():
             set_ids += [int(k) for k in line]
         else:
-            set_names.append(line[0])
+            set_names += line
 
     set_ids = np.array(set_ids, dtype="int32")
     if "GENERATE" in params_map:
