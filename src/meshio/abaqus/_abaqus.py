@@ -122,6 +122,7 @@ def read_buffer(f):
     cell_data = {}
     point_data = {}
     point_ids = None
+    node_counter = 0
 
     line = f.readline()
     while True:
@@ -135,7 +136,7 @@ def read_buffer(f):
 
         keyword = line.partition(",")[0].strip().replace("*", "").upper()
         if keyword == "NODE":
-            tmp_points, tmp_point_ids, line = _read_nodes(f)
+            tmp_points, tmp_point_ids, line, node_counter = _read_nodes(f, node_counter)
             # Concatenate node coordinate
             points = (
                 tmp_points
@@ -247,10 +248,9 @@ def read_buffer(f):
     return mesh
 
 
-def _read_nodes(f):
+def _read_nodes(f, node_counter):
     points = []
     point_ids = {}
-    counter = 0
     while True:
         line = f.readline()
         if not line or line.startswith("*"):
@@ -260,11 +260,11 @@ def _read_nodes(f):
 
         line = line.strip().split(",")
         point_id, coords = line[0], line[1:]
-        point_ids[int(point_id)] = counter
+        point_ids[int(point_id)] = node_counter
         points.append([float(x) for x in coords])
-        counter += 1
+        node_counter += 1
 
-    return np.array(points, dtype=float), point_ids, line
+    return np.array(points, dtype=float), point_ids, line, node_counter
 
 
 def _read_cells(f, params_map, point_ids):
