@@ -165,12 +165,11 @@ def read_buffer(f):
             set_ids, set_name_list, line = _read_set(f, params_map)
             name = params_map["NSET"]
             if set_ids.size == 0 and len(set_name_list) != 0:
-                # temp = [list(point_sets[name_set]) for name_set in set_name_list]
-                # set_ids = np.array(temp, dtype="int32").sort()
-                # point_sets[name] = set_ids
-                pass
-            else:
-                point_sets[name] = set_ids
+                # Set of node set case
+                temp = [point_sets[name_set] for name_set in set_name_list]
+                set_ids = np.hstack(temp)
+                set_ids.sort()
+            point_sets[name] = set_ids
         elif keyword == "ELSET":
             params_map = get_param_map(line, required_keys=["ELSET"])
             set_ids, set_names, line = _read_set(f, params_map)
