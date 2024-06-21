@@ -83,6 +83,7 @@ abaqus_to_meshio_type = {
     # "TETRA8": "tetra8",
     "C3D10": "tetra10",
     "C3D10H": "tetra10",
+    "C3D10HS": "tetra10",
     "C3D10I": "tetra10",
     "C3D10M": "tetra10",
     "C3D10MH": "tetra10",
