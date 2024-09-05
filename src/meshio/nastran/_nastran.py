@@ -13,7 +13,7 @@ from .._files import open_file
 from .._helpers import register_format
 from .._mesh import CellBlock, Mesh
 
-nastran_to_meshio_type = {
+nastran_meshio_mapping = {
     "CELAS1": "vertex",
     "CBEAM": "line",
     "CBUSH": "line",
@@ -42,7 +42,21 @@ nastran_to_meshio_type = {
     "CHEXA_": "hexahedron20",  # fictive
 }
 nastran_solid_types = ["CTETRA", "CPYRA", "CPENTA", "CHEXA"]
-meshio_to_nastran_type = {v: k for k, v in nastran_to_meshio_type.items()}
+meshio_nastran_mapping = {v: k for k, v in nastran_meshio_mapping.items()}
+
+
+def nastran_to_meshio_type(cell_type, nb_nodes):
+    if cell_type == "CBUSH":
+        if nb_nodes == 1:
+            return "vertex"
+        else:
+            return "line"
+
+    return nastran_meshio_mapping[cell_type]
+
+
+def meshio_to_nastran_type(cell_type):
+    return meshio_nastran_mapping[cell_type]
 
 
 def read(filename):
@@ -70,8 +84,8 @@ def read_buffer(f):
     cell_refs = []
     cell_ref = None
 
-    def add_cell(nastran_type, cell, cell_ref):
-        cell_type = nastran_to_meshio_type[nastran_type]
+    def add_cell(nastran_type, cell, cell_type, cell_ref):
+        cell_type = nastran_to_meshio_type(keyword, len(cell))
         cell = list(map(int, cell))
 
         # Treat 2nd order CTETRA, CPYRA, CPENTA, CHEXA elements
@@ -224,7 +238,7 @@ def read_buffer(f):
             points.append([_nastran_string_to_float(i) for i in chunks[3:6]])
 
         # CellBlock
-        elif keyword in nastran_to_meshio_type:
+        elif keyword in nastran_meshio_mapping:
             cell_id = int(chunks[1])
             cell_ref = chunks[2].strip()
             cell_ref = int(cell_ref) if len(cell_ref) > 0 else None
@@ -347,7 +361,7 @@ def write(filename, mesh, point_format="fixed-large", cell_format="fixed-small")
         for ict, cell_block in enumerate(mesh.cells):
             cell_type = cell_block.type
             cells = cell_block.data
-            nastran_type = meshio_to_nastran_type[cell_type]
+            nastran_type = meshio_to_nastran_type(cell_type)
             if cell_format.endswith("-large"):
                 nastran_type += "*"
             if cell_refs is not None:
