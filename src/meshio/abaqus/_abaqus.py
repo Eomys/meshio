@@ -14,6 +14,7 @@ from .._files import open_file
 from .._helpers import register
 from .._mesh import CellBlock, Mesh
 
+
 abaqus_to_meshio_type = {
     # trusses
     "T2D2": "line",
@@ -419,7 +420,11 @@ def _read_set(f, params_map):
 
 
 def write(
-    filename, mesh, float_fmt=".16e", translate_cell_names=True, is_initial_frame=False
+    filename,
+    mesh,
+    float_fmt=".16e",
+    translate_cell_names=True,
+    is_initial_frame=False,
 ):
     with open_file(filename, "wt") as f:
         f.write("*HEADING\n")
@@ -427,39 +432,27 @@ def write(
         f.write(f"written by meshio v{__version__}\n")
         f.write("*NODE\n")
         fmt = ", ".join(["{}"] + ["{:" + float_fmt + "}"] * mesh.points.shape[1]) + "\n"
-        if not is_initial_frame:
-            for k, x in enumerate(mesh.points):
-                f.write(fmt.format(k + 1, *x))
-            eid = 0
-            for cell_type, node_idcs in mesh.cells:
-                name = (
-                    meshio_to_abaqus_type[cell_type]
-                    if translate_cell_names
-                    else cell_type
+        id_node_iter = (
+            mesh.point_data["inp_points"][:, 0] if is_initial_frame else count(1)
+        )
+
+        for k, x in zip(id_node_iter, mesh.points):
+            f.write(fmt.format(k, *x))
+
+        eid = 0
+        for cell_type, node_idcs in mesh.cells:
+            name = (
+                meshio_to_abaqus_type[cell_type] if translate_cell_names else cell_type
+            )
+            f.write(f"*ELEMENT, TYPE={name}\n")
+            for row in node_idcs:
+                eid += 1
+                nids_strs = (
+                    (str(mesh.point_data["inp_points"][nid, 0]) for nid in row.tolist())
+                    if is_initial_frame
+                    else (str(nid + 1) for nid in row.tolist())
                 )
-                f.write(f"*ELEMENT, TYPE={name}\n")
-                for row in node_idcs:
-                    eid += 1
-                    nids_strs = (str(nid + 1) for nid in row.tolist())
-                    f.write(str(eid) + "," + ",".join(nids_strs) + "\n")
-        else:
-            for k, x in zip(mesh.point_data["inp_points"][:, 0], mesh.points):
-                f.write(fmt.format(k, *x))
-            eid = 0
-            for cell_type, node_idcs in mesh.cells:
-                name = (
-                    meshio_to_abaqus_type[cell_type]
-                    if translate_cell_names
-                    else cell_type
-                )
-                f.write(f"*ELEMENT, TYPE={name}\n")
-                for row in node_idcs:
-                    eid += 1
-                    nids_strs = (
-                        str(mesh.point_data["inp_points"][nid, 0])
-                        for nid in row.tolist()
-                    )
-                    f.write(str(eid) + "," + ",".join(nids_strs) + "\n")
+                f.write(str(eid) + "," + ",".join(nids_strs) + "\n")
 
         nnl = 8
         offset = 0
