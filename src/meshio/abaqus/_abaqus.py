@@ -14,6 +14,7 @@ from .._files import open_file
 from .._helpers import register
 from .._mesh import CellBlock, Mesh
 
+
 abaqus_to_meshio_type = {
     # trusses
     "T2D2": "line",
@@ -418,15 +419,26 @@ def _read_set(f, params_map):
     return set_ids, set_names, line
 
 
-def write(filename, mesh, float_fmt=".16e", translate_cell_names=True):
+def write(
+    filename,
+    mesh,
+    float_fmt=".16e",
+    translate_cell_names=True,
+    is_initial_frame=False,
+):
     with open_file(filename, "wt") as f:
         f.write("*HEADING\n")
         f.write("Abaqus DataFile Version 6.14\n")
         f.write(f"written by meshio v{__version__}\n")
         f.write("*NODE\n")
         fmt = ", ".join(["{}"] + ["{:" + float_fmt + "}"] * mesh.points.shape[1]) + "\n"
-        for k, x in enumerate(mesh.points):
-            f.write(fmt.format(k + 1, *x))
+        id_node_iter = (
+            mesh.point_data["inp_points"][:, 0] if is_initial_frame else count(1)
+        )
+
+        for k, x in zip(id_node_iter, mesh.points):
+            f.write(fmt.format(k, *x))
+
         eid = 0
         for cell_type, node_idcs in mesh.cells:
             name = (
@@ -435,7 +447,11 @@ def write(filename, mesh, float_fmt=".16e", translate_cell_names=True):
             f.write(f"*ELEMENT, TYPE={name}\n")
             for row in node_idcs:
                 eid += 1
-                nids_strs = (str(nid + 1) for nid in row.tolist())
+                nids_strs = (
+                    (str(mesh.point_data["inp_points"][nid, 0]) for nid in row.tolist())
+                    if is_initial_frame
+                    else (str(nid + 1) for nid in row.tolist())
+                )
                 f.write(str(eid) + "," + ",".join(nids_strs) + "\n")
 
         nnl = 8
