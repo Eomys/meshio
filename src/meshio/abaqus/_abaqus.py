@@ -125,7 +125,7 @@ def read_buffer(f):
     point_data = {}
     point_ids = None
     node_counter = 0
-
+    coordinate_system = [0, 0, 0]
     line = f.readline()
     while True:
         if not line:  # EOF
@@ -137,8 +137,20 @@ def read_buffer(f):
             continue
 
         keyword = line.partition(",")[0].strip().replace("*", "").upper()
-        if keyword == "NODE":
-            tmp_points, tmp_point_ids, line, node_counter = _read_nodes(f, node_counter)
+        if keyword == "SYSTEM":
+            line = f.readline()
+            if line.startswith("*") or line.startswith("**"):
+                pass
+            else:
+                coordinate_system = [float(coord.strip()) for coord in line.split(",")][
+                    :3
+                ]
+        elif keyword == "NODE":
+            tmp_points, tmp_point_ids, line, node_counter = _read_nodes(
+                f,
+                node_counter,
+                coordinate_system,
+            )
             # Concatenate node coordinate
             points = (
                 tmp_points
@@ -149,6 +161,7 @@ def read_buffer(f):
             point_ids = (
                 tmp_point_ids if point_ids is None else {**point_ids, **tmp_point_ids}
             )
+            coordinate_system = [0, 0, 0]
 
         elif keyword == "ELEMENT":
             if point_ids is None:
@@ -171,6 +184,9 @@ def read_buffer(f):
                 temp = [point_sets[name_set] for name_set in set_name_list]
                 set_ids = np.hstack(temp)
                 set_ids.sort()
+            if name in point_sets:
+                temp = point_sets[name]
+                set_ids = np.append(temp, set_ids)
             point_sets[name] = set_ids
         elif keyword == "ELSET":
             params_map = get_param_map(line, required_keys=["ELSET"])
@@ -249,7 +265,7 @@ def read_buffer(f):
     return mesh
 
 
-def _read_nodes(f, node_counter):
+def _read_nodes(f, node_counter, coordonate_system=[0, 0, 0]):
     points = []
     point_ids = {}
     while True:
@@ -264,8 +280,12 @@ def _read_nodes(f, node_counter):
         point_ids[int(point_id)] = node_counter
         points.append([float(x) for x in coords])
         node_counter += 1
+    points = np.array(points, dtype=float)
+    if coordonate_system != [0, 0, 0]:
+        for i in range(points.shape[0]):
+            points[i, :] = points[i, :] + coordonate_system
 
-    return np.array(points, dtype=float), point_ids, line, node_counter
+    return points, point_ids, line, node_counter
 
 
 def _read_cells(f, params_map, point_ids):
